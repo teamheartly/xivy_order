@@ -5,36 +5,47 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Xivy Order - Barcode Scanner</title>
   <script src="https://unpkg.com/html5-qrcode"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
   <style>
     body { font-family: Arial, sans-serif; padding: 20px; text-align: center; background: #f9f9f9; }
     h1 { margin-bottom: 15px; }
-    form { background: #fff; padding: 20px; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); max-width: 400px; margin: auto; }
+    form { background: #fff; padding: 20px; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); max-width: 450px; margin: auto; }
     label { display: block; text-align: left; margin-top: 10px; font-weight: bold; }
-    input { width: 100%; padding: 10px; margin-top: 5px; border: 1px solid #ccc; border-radius: 6px; }
+    input, select { width: 100%; padding: 10px; margin-top: 5px; border: 1px solid #ccc; border-radius: 6px; }
     button { padding: 10px 15px; margin: 10px 5px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; }
     #startBtn { background: #28a745; color: #fff; }
     #switchBtn { background: #007bff; color: #fff; }
     #stopBtn { background: #dc3545; color: #fff; }
     #reader { margin-top: 15px; }
+    .submitBtn { background: #6c63ff; color: #fff; width: 100%; margin-top: 20px; }
   </style>
 </head>
 <body>
   <h1>📦 Xivy Order Form</h1>
 
   <form id="orderForm">
+    <label for="marketplace">Marketplace</label>
+    <select id="marketplace" name="marketplace" required>
+      <option value="">-- Select Marketplace --</option>
+      <option value="Amazon">Amazon</option>
+      <option value="Flipkart">Flipkart</option>
+      <option value="Meesho">Meesho</option>
+    </select>
+
+    <label for="order_id">Order ID (scan or enter)</label>
+    <input type="text" id="order_id" name="order_id" placeholder="Scan or enter order ID">
+
+    <label for="order_date">Order Date</label>
+    <input type="text" id="order_date" name="order_date" placeholder="YYYY-MM-DD" required>
+
     <label for="sku">SKU / Barcode</label>
     <input type="text" id="sku" name="sku" placeholder="Scan or enter SKU">
 
-    <label for="product">Product Name</label>
-    <input type="text" id="product" name="product" placeholder="Enter product name">
+    <label for="packer">Pack By</label>
+    <input type="text" id="packer" name="packer" placeholder="Enter packer name">
 
-    <label for="qty">Quantity</label>
-    <input type="number" id="qty" name="qty" placeholder="Enter quantity">
-
-    <label for="customer">Customer Name</label>
-    <input type="text" id="customer" name="customer" placeholder="Enter customer name">
-
-    <button type="submit" style="background:#6c63ff;color:#fff;">Submit Order</button>
+    <button type="submit" class="submitBtn">Submit & Download CSV</button>
   </form>
 
   <br>
@@ -46,9 +57,13 @@
   <div id="reader"></div>
 
   <script>
+    // Date picker
+    flatpickr("#order_date", { dateFormat: "Y-m-d", allowInput: true });
+
     let html5QrCode;
-    let currentFacingMode = "environment"; // start with back camera
+    let currentFacingMode = "environment";
     let isScanning = false;
+    let scanTarget = "sku"; // default field to fill
 
     const startBtn = document.getElementById("startBtn");
     const switchBtn = document.getElementById("switchBtn");
@@ -56,15 +71,14 @@
 
     async function startScanner() {
       if (isScanning) return;
-
       html5QrCode = new Html5Qrcode("reader");
       try {
         await html5QrCode.start(
           { facingMode: currentFacingMode },
           { fps: 10, qrbox: 250 },
           (decodedText) => {
-            document.getElementById("sku").value = decodedText;
-            stopScanner(); // auto-stop after successful scan
+            document.getElementById(scanTarget).value = decodedText;
+            stopScanner(); // stop after scan
           }
         );
         isScanning = true;
@@ -79,8 +93,7 @@
 
     async function switchCamera() {
       if (!isScanning) return;
-
-      await stopScanner(false); // stop without resetting
+      await stopScanner(false);
       currentFacingMode = (currentFacingMode === "environment") ? "user" : "environment";
       await startScanner();
     }
@@ -93,7 +106,6 @@
         startBtn.disabled = false;
         switchBtn.disabled = true;
         stopBtn.disabled = true;
-        if (reset) console.log("Scanner stopped");
       }
     }
 
@@ -101,12 +113,35 @@
     switchBtn.addEventListener("click", switchCamera);
     stopBtn.addEventListener("click", () => stopScanner(true));
 
+    // Let user choose which field to scan into
+    document.getElementById("order_id").addEventListener("focus", () => scanTarget = "order_id");
+    document.getElementById("sku").addEventListener("focus", () => scanTarget = "sku");
+
+    // Submit form → download CSV
     document.getElementById("orderForm").addEventListener("submit", function(e) {
       e.preventDefault();
-      alert("✅ Order Submitted!\n\nSKU: " + this.sku.value + 
-            "\nProduct: " + this.product.value + 
-            "\nQuantity: " + this.qty.value + 
-            "\nCustomer: " + this.customer.value);
+      const marketplace = this.marketplace.value;
+      const order_id = this.order_id.value;
+      const order_date = this.order_date.value;
+      const sku = this.sku.value;
+      const packer = this.packer.value;
+      const timestamp = new Date().toISOString().replace("T"," ").split(".")[0];
+
+      if (!order_id || !sku) {
+        alert("❌ Please scan/enter both Order ID and SKU.");
+        return;
+      }
+
+      const row = [timestamp, marketplace, order_id, order_date, packer, sku];
+      const csvContent = "data:text/csv;charset=utf-8,"
+        + ["Timestamp,Marketplace,Order ID,Order Date,Packer,SKU", row.join(",")].join("\n");
+
+      const link = document.createElement("a");
+      link.href = encodeURI(csvContent);
+      link.download = "order_data.csv";
+      link.click();
+
+      alert("✅ Order saved!");
       this.reset();
     });
   </script>
