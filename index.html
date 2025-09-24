@@ -1,21 +1,114 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Xivy Order - Barcode Scanner</title>
+  <script src="https://unpkg.com/html5-qrcode"></script>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; text-align: center; background: #f9f9f9; }
+    h1 { margin-bottom: 15px; }
+    form { background: #fff; padding: 20px; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); max-width: 400px; margin: auto; }
+    label { display: block; text-align: left; margin-top: 10px; font-weight: bold; }
+    input { width: 100%; padding: 10px; margin-top: 5px; border: 1px solid #ccc; border-radius: 6px; }
+    button { padding: 10px 15px; margin: 10px 5px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; }
+    #startBtn { background: #28a745; color: #fff; }
+    #switchBtn { background: #007bff; color: #fff; }
+    #stopBtn { background: #dc3545; color: #fff; }
+    #reader { margin-top: 15px; }
+  </style>
+</head>
 <body>
-<h1>Camera Permission Test</h1>
-<button id="btn">Enable Camera</button>
-<video id="video" width="300" height="200" autoplay></video>
+  <h1>📦 Xivy Order Form</h1>
 
-<script>
-document.getElementById("btn").addEventListener("click", async () => {
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-    document.getElementById("video").srcObject = stream;
-    alert("✅ Camera started!");
-  } catch (err) {
-    alert("❌ Camera failed: " + err.message);
-    console.error(err);
-  }
-});
-</script>
+  <form id="orderForm">
+    <label for="sku">SKU / Barcode</label>
+    <input type="text" id="sku" name="sku" placeholder="Scan or enter SKU">
+
+    <label for="product">Product Name</label>
+    <input type="text" id="product" name="product" placeholder="Enter product name">
+
+    <label for="qty">Quantity</label>
+    <input type="number" id="qty" name="qty" placeholder="Enter quantity">
+
+    <label for="customer">Customer Name</label>
+    <input type="text" id="customer" name="customer" placeholder="Enter customer name">
+
+    <button type="submit" style="background:#6c63ff;color:#fff;">Submit Order</button>
+  </form>
+
+  <br>
+
+  <button id="startBtn">📷 Start Scanner</button>
+  <button id="switchBtn" disabled>🔄 Switch Camera</button>
+  <button id="stopBtn" disabled>⛔ Stop Scanner</button>
+
+  <div id="reader"></div>
+
+  <script>
+    let html5QrCode;
+    let currentFacingMode = "environment"; // start with back camera
+    let isScanning = false;
+
+    const startBtn = document.getElementById("startBtn");
+    const switchBtn = document.getElementById("switchBtn");
+    const stopBtn = document.getElementById("stopBtn");
+
+    async function startScanner() {
+      if (isScanning) return;
+
+      html5QrCode = new Html5Qrcode("reader");
+      try {
+        await html5QrCode.start(
+          { facingMode: currentFacingMode },
+          { fps: 10, qrbox: 250 },
+          (decodedText) => {
+            document.getElementById("sku").value = decodedText;
+            stopScanner(); // auto-stop after successful scan
+          }
+        );
+        isScanning = true;
+        startBtn.disabled = true;
+        switchBtn.disabled = false;
+        stopBtn.disabled = false;
+      } catch (err) {
+        alert("Camera error: " + err);
+        console.error(err);
+      }
+    }
+
+    async function switchCamera() {
+      if (!isScanning) return;
+
+      await stopScanner(false); // stop without resetting
+      currentFacingMode = (currentFacingMode === "environment") ? "user" : "environment";
+      await startScanner();
+    }
+
+    async function stopScanner(reset = true) {
+      if (html5QrCode && isScanning) {
+        await html5QrCode.stop();
+        await html5QrCode.clear();
+        isScanning = false;
+        startBtn.disabled = false;
+        switchBtn.disabled = true;
+        stopBtn.disabled = true;
+        if (reset) console.log("Scanner stopped");
+      }
+    }
+
+    startBtn.addEventListener("click", startScanner);
+    switchBtn.addEventListener("click", switchCamera);
+    stopBtn.addEventListener("click", () => stopScanner(true));
+
+    document.getElementById("orderForm").addEventListener("submit", function(e) {
+      e.preventDefault();
+      alert("✅ Order Submitted!\n\nSKU: " + this.sku.value + 
+            "\nProduct: " + this.product.value + 
+            "\nQuantity: " + this.qty.value + 
+            "\nCustomer: " + this.customer.value);
+      this.reset();
+    });
+  </script>
 </body>
 </html>
