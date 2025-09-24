@@ -1,179 +1,29 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Order Form with Barcode Scanner</title>
-
-  <!-- Flatpickr CSS -->
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
-
-  <!-- Barcode Scanner -->
   <script src="https://unpkg.com/html5-qrcode/minified/html5-qrcode.min.js"></script>
-
-  <style>
-    body {
-      font-family: Arial, sans-serif;
-      margin: 20px;
-      background: #f9f9f9;
-    }
-    h1 {
-      text-align: center;
-      margin-bottom: 20px;
-    }
-    form {
-      max-width: 500px;
-      margin: auto;
-      background: #fff;
-      padding: 20px;
-      border-radius: 10px;
-      box-shadow: 0 4px 10px rgba(0,0,0,0.1);
-    }
-    label {
-      display: block;
-      margin-top: 12px;
-      font-weight: bold;
-    }
-    input, select, button {
-      width: 100%;
-      padding: 10px;
-      margin-top: 5px;
-      border: 1px solid #ccc;
-      border-radius: 5px;
-    }
-    button {
-      background: #007bff;
-      color: #fff;
-      font-weight: bold;
-      cursor: pointer;
-    }
-    button:hover {
-      background: #0056b3;
-    }
-    #reader {
-      width: 100%;
-      margin-top: 15px;
-      display: none;
-    }
-    .error {
-      color: red;
-      margin-top: 10px;
-    }
-    .success {
-      color: green;
-      margin-top: 10px;
-    }
-  </style>
 </head>
 <body>
-  <h1>Order Form</h1>
-
-  <form id="orderForm">
-    <label>Order Number:</label>
-    <input type="text" id="order_number" required>
-
-    <label>Order Date:</label>
-    <input type="text" id="order_date" required>
-
-    <label>Packer Name:</label>
-    <input type="text" id="packer_name" required>
-
-    <label>SKU:</label>
-    <input type="text" id="sku" required>
-    <button type="button" id="scanBtn">📷 Scan Barcode</button>
-    <div id="reader"></div>
-
-    <label>Marketplace:</label>
-    <select id="marketplace" required>
-      <option value="Amazon">Amazon</option>
-      <option value="Flipkart">Flipkart</option>
-      <option value="Meesho">Meesho</option>
-    </select>
-
-    <button type="submit">Save</button>
-  </form>
-
-  <p id="message"></p>
-
-  <!-- Flatpickr JS -->
-  <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+  <h2>Test Camera</h2>
+  <button id="startBtn">Start Camera</button>
+  <div id="reader" style="width:300px;height:300px;"></div>
 
   <script>
-    // Date Picker
-    flatpickr("#order_date", { dateFormat: "Y-m-d", allowInput: true });
-
-    const message = document.getElementById("message");
+    const btn = document.getElementById("startBtn");
     const readerDiv = document.getElementById("reader");
-    const scanBtn = document.getElementById("scanBtn");
-    let html5QrCode;
-
-    // Start / Stop Scanner
-    scanBtn.addEventListener("click", async () => {
-      if (!html5QrCode) {
-        html5QrCode = new Html5Qrcode("reader");
+    let scanner;
+    btn.addEventListener("click", async () => {
+      readerDiv.style.display = "block";
+      scanner = new Html5Qrcode("reader");
+      try {
+        await scanner.start(
+          { facingMode: "environment" },
+          { fps: 10, qrbox: 250 },
+          decodedText => console.log("Scanned: ", decodedText)
+        );
+      } catch (err) {
+        alert("Camera failed: " + err);
       }
-      if (readerDiv.style.display === "none" || readerDiv.style.display === "") {
-        readerDiv.style.display = "block";
-        try {
-          await html5QrCode.start(
-            { facingMode: "environment" }, // back camera
-            { fps: 10, qrbox: 250 },
-            (decodedText) => {
-              document.getElementById("sku").value = decodedText;
-              message.textContent = "✅ Scanned: " + decodedText;
-              message.className = "success";
-              stopScanner();
-            }
-          );
-        } catch (err) {
-          message.textContent = "❌ Camera error: " + err;
-          message.className = "error";
-        }
-      } else {
-        stopScanner();
-      }
-    });
-
-    function stopScanner() {
-      if (html5QrCode) {
-        html5QrCode.stop().then(() => {
-          html5QrCode.clear();
-          readerDiv.style.display = "none";
-        }).catch(err => {
-          console.error("Stop failed", err);
-        });
-      }
-    }
-
-    // Form Submit → download CSV
-    document.getElementById("orderForm").addEventListener("submit", function(e) {
-      e.preventDefault();
-      const order_number = document.getElementById("order_number").value.trim();
-      const order_date = document.getElementById("order_date").value.trim();
-      const packer_name = document.getElementById("packer_name").value.trim();
-      const sku = document.getElementById("sku").value.trim();
-      const marketplace = document.getElementById("marketplace").value;
-
-      if (!sku) {
-        message.textContent = "❌ SKU is required.";
-        message.className = "error";
-        return;
-      }
-
-      const timestamp = new Date().toISOString().replace("T"," ").split(".")[0];
-      const row = [timestamp, marketplace, order_number, order_date, packer_name, sku];
-
-      const csvContent = "data:text/csv;charset=utf-8,"
-        + ["Timestamp,Marketplace,Order Number,Order Date,Packer Name,SKU", row.join(",")].join("\n");
-
-      const link = document.createElement("a");
-      link.href = encodeURI(csvContent);
-      link.download = "order_data.csv";
-      link.click();
-
-      message.textContent = "✅ Order saved successfully!";
-      message.className = "success";
-      e.target.reset();
     });
   </script>
 </body>
