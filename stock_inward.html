@@ -3,115 +3,77 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Stock Inward - Xivy</title>
-  <script src="https://unpkg.com/html5-qrcode"></script>
+  <title>Stock Inward Scanner</title>
   <style>
-    body { font-family: Arial, sans-serif; padding: 20px; text-align: center; background: #f9f9f9; }
-    h1 { margin-bottom: 15px; }
-    #reader { width: 300px; margin: auto; }
-    table { margin: 20px auto; border-collapse: collapse; width: 90%; max-width: 400px; }
-    th, td { border: 1px solid #ccc; padding: 8px; text-align: center; }
-    th { background: #6c63ff; color: #fff; }
-    button { padding: 10px 15px; margin: 10px 5px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; }
-    #submitBtn { background: #28a745; color: #fff; }
+    body { font-family: Arial, sans-serif; margin: 0; padding: 0; background: #f4f6f9; text-align: center; }
+    header { background: #6c63ff; color: #fff; padding: 15px; font-size: 22px; }
+    video { width: 90%; max-width: 400px; margin: 20px auto; border: 2px solid #6c63ff; border-radius: 10px; }
+    button { margin: 10px; padding: 10px 20px; font-size: 16px; border: none; border-radius: 8px; cursor: pointer; }
+    #submitBtn { background: #28a745; color: #fff; display: none; }
+    #nextBtn { background: #007bff; color: #fff; display: none; }
+    #status { margin: 15px; font-weight: bold; }
   </style>
 </head>
 <body>
-  <h1>📥 Stock Inward</h1>
-  <div id="reader"></div>
+  <header>📥 Stock Inward Scanner</header>
+  <video id="video" autoplay></video>
+  <p id="status">Scanning...</p>
+  <button id="nextBtn">Next Scan</button>
+  <button id="submitBtn">Submit</button>
 
-  <table id="skuTable">
-    <thead>
-      <tr>
-        <th>Sr</th>
-        <th>SKU</th>
-        <th>Qty</th>
-      </tr>
-    </thead>
-    <tbody></tbody>
-  </table>
-
-  <button id="submitBtn">Submit & Download CSV</button>
-
+  <script src="https://unpkg.com/@zxing/library@latest"></script>
   <script>
-    let html5QrCode = new Html5Qrcode("reader");
-    let isScanning = false;
-    let skuData = {}; // store SKU -> quantity
+    const codeReader = new ZXing.BrowserBarcodeReader();
+    let records = []; // {sr, sku, qty}
+    let scanning = true;
 
-    async function startScanner() {
-      if (isScanning) return;
-      try {
-        await html5QrCode.start(
-          { facingMode: "environment" },
-          { fps: 10, qrbox: 250 },
-          (decodedText) => {
-            handleScan(decodedText);
-          }
-        );
-        isScanning = true;
-      } catch (err) {
-        alert("Camera error: " + err);
-      }
-    }
-
-    async function stopScanner() {
-      if (isScanning) {
-        await html5QrCode.stop();
-        await html5QrCode.clear();
-        isScanning = false;
-      }
-    }
-
-    function handleScan(sku) {
-      if (!sku) return;
-      if (skuData[sku]) {
-        skuData[sku] += 1;
+    function updateRecords(sku) {
+      let found = records.find(r => r.sku === sku);
+      if (found) {
+        found.qty += 1;
       } else {
-        skuData[sku] = 1;
+        records.push({ sr: records.length + 1, sku: sku, qty: 1 });
       }
-      updateTable();
-      stopScanner().then(() => {
-        if (confirm(`SKU: ${sku} scanned.\nDo you want to scan next?`)) {
-          startScanner();
+    }
+
+    function startScanner() {
+      codeReader.decodeFromVideoDevice(null, "video", (result, err) => {
+        if (result && scanning) {
+          scanning = false;
+          const sku = result.text;
+          updateRecords(sku);
+          document.getElementById("status").innerText = "Scanned: " + sku;
+          document.getElementById("nextBtn").style.display = "inline-block";
+          document.getElementById("submitBtn").style.display = "inline-block";
         }
+      }, { formats: [ZXing.BarcodeFormat.CODE_128] });
+    }
+
+    function downloadCSV() {
+      let csv = "SR,SKU,QTY\n";
+      records.forEach(r => {
+        csv += `${r.sr},${r.sku},${r.qty}\n`;
       });
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "stock_inward.csv";
+      a.click();
     }
 
-    function updateTable() {
-      const tbody = document.querySelector("#skuTable tbody");
-      tbody.innerHTML = "";
-      let sr = 1;
-      for (let sku in skuData) {
-        const tr = document.createElement("tr");
-        tr.innerHTML = `<td>${sr}</td><td>${sku}</td><td>${skuData[sku]}</td>`;
-        tbody.appendChild(tr);
-        sr++;
-      }
-    }
-
-    document.getElementById("submitBtn").addEventListener("click", () => {
-      if (Object.keys(skuData).length === 0) {
-        alert("No SKU scanned!");
-        return;
-      }
-      const timestamp = new Date().toISOString().replace("T"," ").split(".")[0];
-      let csvRows = [["Timestamp","SKU","Qty"]];
-      for (let sku in skuData) {
-        csvRows.push([timestamp, sku, skuData[sku]]);
-      }
-      const csvContent = "data:text/csv;charset=utf-8," + csvRows.map(e => e.join(",")).join("\n");
-      const link = document.createElement("a");
-      link.href = encodeURI(csvContent);
-      link.download = `stock_inward_${Date.now()}.csv`;
-      link.click();
-      alert("✅ Stock inward saved!");
-      skuData = {};
-      updateTable();
-      startScanner(); // restart scanner for new session
+    document.getElementById("nextBtn").addEventListener("click", () => {
+      scanning = true;
+      document.getElementById("status").innerText = "Scanning...";
+      document.getElementById("nextBtn").style.display = "none";
     });
 
-    // start scanner automatically on page load
-    window.onload = startScanner;
+    document.getElementById("submitBtn").addEventListener("click", () => {
+      downloadCSV();
+    });
+
+    // Start scanning on load
+    startScanner();
   </script>
 </body>
 </html>
